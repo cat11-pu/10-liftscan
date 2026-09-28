@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>liftscan 群控轨迹屏</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;background:#0d1117;color:#e8eefc}
+.bar{display:flex;flex-wrap:wrap;gap:8px;padding:10px 16px;background:#141a26;border-bottom:1px solid #253046}
+.chip{font-size:12px;padding:3px 10px;border-radius:999px;background:#1d2740;color:#9fc4ff}
+.chip.bad{background:#3a1f2b;color:#ff9aa9}
+main{padding:12px 16px}
+canvas{background:#0a0f1a;border:1px solid #1f2a3f;border-radius:10px;width:100%;height:380px}
+.panel{margin-top:10px;background:#141a26;border:1px solid #253046;border-radius:10px;padding:10px}
+button{font:inherit;padding:5px 12px;margin:0 8px 6px 0;border:1px solid #2b3a5c;border-radius:8px;background:#1b2440;color:#e8eefc;cursor:pointer}
+button.main{background:#3b6ef5;border-color:#3b6ef5}
+input{font:inherit;padding:4px 8px;border:1px solid #2b3a5c;border-radius:6px;background:#0a0f1a;color:#e8eefc;width:70px;margin-right:6px}
+ul{list-style:none;margin:6px 0 0;padding:0;font-size:12px;color:#9fb0cc;max-height:110px;overflow:auto}
+li{padding:2px 0;border-bottom:1px dashed #1f2a3f}
+</style></head>
+<body>
+<div class="bar" id="chips"></div>
+<main>
+  <canvas id="lane" width="1120" height="380"></canvas>
+  <div class="panel">
+    <div>
+      层 <input id="floor" type="number" value="5">
+      方向 <input id="dir" type="text" value="up">
+      目的层 <input id="dest" type="number" value="9">
+      <button id="doCall" class="main">登记厅呼</button>
+      <button id="doCancel">撤销厅呼</button>
+      <button id="doSelect">轿内指令</button>
+      <button id="doStep">推进一帧</button>
+      <button id="doReset">重置</button>
+    </div>
+    <ul id="log"></ul>
+  </div>
+</main>
+<div id="scene" hidden>{
+  "top": 12,
+  "cars": [ { "id": "A", "pos": 1 }, { "id": "B", "pos": 12 } ],
+  "events": [
+    { "kind": "call", "floor": 4, "dir": "up", "dest": 9 },
+    { "kind": "step" },
+    { "kind": "call", "floor": 9, "dir": "down", "dest": 2 },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "call", "floor": 7, "dir": "up", "dest": 12 },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "cancel", "floor": 7, "dir": "up" },
+    { "kind": "step" },
+    { "kind": "call", "floor": 15, "dir": "up", "dest": 12 },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "select", "car": "A", "floor": 6 },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "call", "floor": 10, "dir": "down", "dest": 3 },
+    { "kind": "step" },
+    { "kind": "step" }
+  ]
+}</div>
+<script type="module">
+import { render } from "./app.js";
+
+const base = JSON.parse(document.getElementById("scene").textContent);
+let spec = JSON.parse(JSON.stringify(base));
+const canvas = document.getElementById("lane");
+const ctx = canvas.getContext("2d");
+
+function draw() {
+  const view = render(spec);
+  const w = canvas.width;
+  const h = canvas.height;
+  const padL = 46;
+  const padB = 28;
+  const padT = 18;
+  ctx.clearRect(0, 0, w, h);
+  const top = view.top;
+  const frames = Math.max(view.tick, 1);
+  const xOf = function (frame) { return padL + (frame / frames) * (w - padL - 16); };
+  const yOf = function (floor) { return h - padB - ((floor - 1) / (top - 1)) * (h - padB - padT); };
+  ctx.strokeStyle = "#1c2740";
+  ctx.fillStyle = "#6f86a8";
+  ctx.font = "11px system-ui";
+  for (let floor = 1; floor <= top; floor += 1) {
+    ctx.beginPath();
+    ctx.moveTo(padL, yOf(floor));
+    ctx.lineTo(w - 16, yOf(floor));
+    ctx.stroke();
+    ctx.fillText(String(floor), 16, yOf(floor) + 4);
+  }
+  for (let frame = 0; frame <= frames; frame += Math.max(1, Math.round(frames / 12))) {
+    ctx.beginPath();
+    ctx.moveTo(xOf(frame), padT);
+    ctx.lineTo(xOf(frame), h - padB);
+    ctx.stroke();
+  }
+  const colors = ["#3b6ef5", "#f5a03b", "#41d18a"];
+  view.traces.forEach(function (pair, spot) {
+    const trace = pair[1];
+    ctx.strokeStyle = colors[spot % colors.length];
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(xOf(0), yOf(base.cars[spot].pos));
+    trace.forEach(function (pos, at) {
+      ctx.lineTo(xOf(at + 1), yOf(pos));
+    });
+    ctx.stroke();
+    ctx.fillStyle = colors[spot % colors.length];
+    ctx.fillText(pair[0], xOf(0) + 4, yOf(base.cars[spot].pos) - 6);
+  });
+  view.stops.forEach(function (stop) {
+    ctx.fillStyle = stop[3] > 0 ? "#41d18a" : "#ff9aa9";
+    ctx.beginPath();
+    ctx.arc(xOf(stop[1]), yOf(stop[2]), 5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  view.waiting.forEach(function (call) {
+    ctx.fillStyle = "#f5d13b";
+    ctx.beginPath();
+    ctx.arc(padL - 12, yOf(call[0]), 4, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  const chips = document.getElementById("chips");
+  chips.textContent = "";
+  const chip = function (label, bad) {
+    const span = document.createElement("span");
+    span.className = bad ? "chip bad" : "chip";
+    span.textContent = label;
+    chips.appendChild(span);
+  };
+  chip("帧号 " + view.tick);
+  chip("完成 " + view.done);
+  chip("在乘 " + view.riding);
+  chip("等待 " + view.waiting.length);
+  chip("最长等待 " + view.max_wait);
+  chip("无空停靠 " + view.invariants.no_empty_stop, !view.invariants.no_empty_stop);
+  chip("计划与等待一致 " + view.invariants.plan_ok, !view.invariants.plan_ok);
+  chip("异常 " + view.failed, view.failed > 0);
+  const log = document.getElementById("log");
+  log.textContent = "";
+  const labels = { call: "登记厅呼", select: "轿内指令", cancel: "撤销厅呼", step: "推进一帧" };
+  spec.events.slice(-40).reverse().forEach(function (event, spot) {
+    const item = document.createElement("li");
+    item.textContent = "#" + (spec.events.length - spot) + "  " + (labels[event.kind] || event.kind) + "  " +
+      JSON.stringify(event).replace(/[{}"]/g, "").slice(0, 60);
+    log.appendChild(item);
+  });
+}
+
+document.getElementById("doCall").addEventListener("click", function () {
+  spec.events.push({ kind: "call", floor: Number(document.getElementById("floor").value),
+                     dir: document.getElementById("dir").value,
+                     dest: Number(document.getElementById("dest").value) });
+  draw();
+});
+document.getElementById("doCancel").addEventListener("click", function () {
+  spec.events.push({ kind: "cancel", floor: Number(document.getElementById("floor").value),
+                     dir: document.getElementById("dir").value });
+  draw();
+});
+document.getElementById("doSelect").addEventListener("click", function () {
+  spec.events.push({ kind: "select", car: "A", floor: Number(document.getElementById("floor").value) });
+  draw();
+});
+document.getElementById("doStep").addEventListener("click", function () {
+  spec.events.push({ kind: "step" });
+  draw();
+});
+document.getElementById("doReset").addEventListener("click", function () {
+  spec = JSON.parse(JSON.stringify(base));
+  draw();
+});
+draw();
+</script>
+</body>
+</html>

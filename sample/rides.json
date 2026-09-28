@@ -1,0 +1,29 @@
+{
+  "top": 12,
+  "cars": [ { "id": "A", "pos": 1 }, { "id": "B", "pos": 12 } ],
+  "events": [
+    { "kind": "call", "floor": 4, "dir": "up", "dest": 9 },
+    { "kind": "step" },
+    { "kind": "call", "floor": 9, "dir": "down", "dest": 2 },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "call", "floor": 7, "dir": "up", "dest": 12 },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "cancel", "floor": 7, "dir": "up" },
+    { "kind": "step" },
+    { "kind": "call", "floor": 15, "dir": "up", "dest": 12 },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "select", "car": "A", "floor": 6 },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "step" },
+    { "kind": "call", "floor": 10, "dir": "down", "dest": 3 },
+    { "kind": "step" },
+    { "kind": "step" }
+  ]
+}
